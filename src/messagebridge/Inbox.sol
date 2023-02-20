@@ -2,95 +2,119 @@
 pragma solidity >=0.8.18;
 
 import {Rolodex} from "./Rolodex.sol";
+import {MessageBox} from "./MessageBox.sol";
 
 /**
  * @title Inbox
  * @author LHerskind
  * @notice Used to pass messages into the rollup, e.g., L1 -> L2 messages.
- * Message are stored in a id => msgHash mapping as we can easily enforce insert ordering,
- * and that way to ensure a sequencers cannot "skip" inserted messages.
  */
-contract Inbox {
+contract Inbox is MessageBox {
+  error NotPastDeadline();
   error Unauthorized();
   error NotPortal(address caller);
 
-  event MessageSent(
-    address indexed portal, bytes32 indexed recipient, bytes32 msgHash, bytes content
+  event MessageAdded(
+    bytes32 indexed entryKey,
+    bytes32 indexed l2Address,
+    address indexed portal,
+    uint256 deadline,
+    uint256 fee,
+    bytes content
   );
 
   Rolodex immutable ROLODEX;
   address immutable ROLLUP;
 
-  // inboxEntry = keccak256(address portal, block.chainid, sha256(messageData))
-  mapping(uint256 index => bytes32 inboxEntry) public entries;
-  uint256 public messageCount;
-  uint256 public consumeCount;
+  mapping(address account => uint256 balance) public feesAccrued;
 
-  /**
-   * @notice Deploys t
-   * @param _rolodex - The address of the Rolodex, which keeps track of contracts.
-   */
   constructor(Rolodex _rolodex) {
     ROLLUP = msg.sender;
     ROLODEX = _rolodex;
   }
 
   /**
-   * @notice Inserts a message into the message box
-   * @dev Only callable if the caller is a portal contract according to the Rolodex
-   * @param _content The message content (application specific)
-   * @return The index of the entry in entries "array"
+   * @notice Computes an entry key for the Inbox
+   * @param _portal - The ethereum address of the portal
+   * @param _deadline - The timestamp after which the entry can be cancelled
+   * @param _fee - The fee provided to sequencer for including the entry
+   * @param _content - The content of the entry (application specific)
+   * @return The key of the entry in the set
    */
-  function sendL2Message(bytes memory _content) external returns (uint256) {
-    bytes32 l2Address = ROLODEX.l2Contracts(msg.sender);
-    if (l2Address == bytes32(0)) {
-      revert NotPortal(msg.sender);
-    }
-
-    bytes32 messageHash = sha256(_content);
-    bytes32 entryHash = keccak256(abi.encode(msg.sender, block.chainid, messageHash));
-
-    uint256 messageId = messageCount;
-
-    entries[messageId] = entryHash;
-    messageCount += 1;
-
-    emit MessageSent(msg.sender, l2Address, entryHash, _content);
-
-    return messageId;
+  function computeEntryKey(address _portal, uint256 _deadline, uint256 _fee, bytes memory _content)
+    public
+    pure
+    returns (bytes32)
+  {
+    return keccak256(abi.encode(_portal, _deadline, _fee, _content));
   }
 
   /**
-   * @notice Consumes up to _toConsumeCount messages (less if not enough messages to consume)
-   * @dev Called by the rollup to pull messages
-   * @dev We take the next `_toConsumeCount` entries to reduce the ability to "skip" messages
-   * @param _toConsumeCount - The number of messages we want to consume
-   * @return totalConsumed - The total number of consumed messages
-   * @return consumed - Hashes of the consumed entries
+   * @notice Inserts an entry into the Inbox
+   * @dev Only callable by contracts that are portals according to the Rolodex
+   * @dev Will emit `MessageAdded` with data for easy access by the sequencer
+   * @dev msg.value - The fee provided to sequencer for including the entry
+   * @param _deadline - The timestamp after which the entry can be cancelled
+   * @param _content - The content of the entry (application specific)
+   * @return The key of the entry in the set
    */
-  function chug(uint256 _toConsumeCount)
+  function sendL2Message(uint256 _deadline, bytes memory _content)
     external
-    returns (uint256 totalConsumed, bytes32[] memory consumed)
+    payable
+    returns (bytes32)
   {
+    bytes32 l2Address = ROLODEX.l2Contracts(msg.sender);
+    if (l2Address == bytes32(0)) revert NotPortal(msg.sender);
+    bytes32 entryKey = computeEntryKey(msg.sender, _deadline, msg.value, _content);
+    _insert(entryKey);
+    emit MessageAdded(entryKey, l2Address, msg.sender, _deadline, msg.value, _content);
+    return entryKey;
+  }
+
+  /**
+   * @notice Cancel a pending L2 message
+   * @dev Will revert if the deadline have not been crossed
+   * @dev Must be called by portal that inserted the entry
+   * @param _feeCollector - The address to receive the "fee"
+   * @param _deadline - The timestamp after which the entry can be cancelled
+   * @param _fee - The fee provided to sequencer for including the entry
+   * @param _content - The content of the entry (application specific)
+   * @return The key of the entry removed
+   */
+  function cancelL2Message(
+    address _feeCollector,
+    uint256 _deadline,
+    uint256 _fee,
+    bytes memory _content
+  ) external returns (bytes32) {
+    if (_deadline < block.timestamp) revert NotPastDeadline();
+    bytes32 entryKey = computeEntryKey(msg.sender, _deadline, _fee, _content);
+    _consume(entryKey);
+    feesAccrued[_feeCollector] += _fee;
+    return entryKey;
+  }
+
+  /**
+   * @notice Consumes an entry from the Inbox
+   * @dev Only callable by the rollup contract
+   * @param _feeCollector - The address to receive the "fee"
+   * @param _portal - The ethereum address of the portal
+   * @param _deadline - The timestamp after which the entry can be cancelled
+   * @param _fee - The fee provided to sequencer for including the entry
+   * @param _content - The content of the entry (application specific)
+   * @return The key of the entry removed
+   */
+  function consume(
+    address _feeCollector,
+    address _portal,
+    uint256 _deadline,
+    uint256 _fee,
+    bytes memory _content
+  ) external returns (bytes32) {
     if (msg.sender != ROLLUP) revert Unauthorized();
-    totalConsumed = consumeCount;
-    uint256 consumables = messageCount;
-    uint256 toConsume;
-    if (_toConsumeCount > consumables) {
-      toConsume = consumables;
-    } else {
-      toConsume = _toConsumeCount;
-    }
-
-    consumed = new bytes32[](toConsume);
-
-    for (uint256 i = 0; i < toConsume; i++) {
-      consumed[i] = entries[totalConsumed + i];
-    }
-
-    totalConsumed += toConsume;
-
-    consumeCount = totalConsumed;
-    return (totalConsumed, consumed);
+    bytes32 entryKey = computeEntryKey(_portal, _deadline, _fee, _content);
+    _consume(entryKey);
+    feesAccrued[_feeCollector] += _fee;
+    return entryKey;
   }
 }

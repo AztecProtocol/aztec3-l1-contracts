@@ -24,19 +24,16 @@ contract Rolodex {
 
   function addLink(address _portal, bytes32 _l2Address) external returns (bool) {
     if (msg.sender != ROLLUP) revert Unauthorized();
+    if (_l2Address == bytes32(0)) revert InvalidInput(_portal, _l2Address);
+    if (_portal == address(0)) revert InvalidInput(_portal, _l2Address);
     if (l2Contracts[_portal] != bytes32(0) || portals[_l2Address] != address(0)) {
       revert AlreadyListed(_portal, _l2Address);
-    }
-
-    if (_l2Address == bytes32(0)) {
-      revert InvalidInput(_portal, _l2Address);
     }
 
     l2Contracts[_portal] = _l2Address;
     portals[_l2Address] = _portal;
 
     emit AddedLink(_portal, _l2Address);
-
     return true;
   }
 }
