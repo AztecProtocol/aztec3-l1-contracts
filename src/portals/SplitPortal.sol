@@ -51,12 +51,15 @@ contract SplitPortal {
 
     TokenPortal(_tokenPortal).withdraw(sum, address(this), true);
 
+    bytes32 recipients = keccak256(abi.encode(_recipients));
+    bytes32 amounts = keccak256(abi.encode(_amounts));
+
     OUTBOX.consume(
       abi.encodeWithSignature(
-        "split(address,address[],uint256[],address)",
+        "split(address,bytes32,bytes32,address)",
         _tokenPortal,
-        _recipients,
-        _amounts,
+        recipients,
+        amounts,
         _withCaller ? msg.sender : address(0)
       )
     );

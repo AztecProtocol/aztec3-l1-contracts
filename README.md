@@ -56,7 +56,7 @@ To ensure logical separation the `inbox` and `outbox` on ethereum L1 is handled 
 Because any message being "passed across the chains" is done as part of rollup execution, we have the ability to enforce checks and transformations at the time of "communication". This allows us to create a design where the in-transit message is kept merely as raw "bytes" and we can use locally "cheap" hashing functions to ensure correctness with a small storage overhead. 
 
 A message being passed between the two "chains" have the following form:
-```json
+```
 {
   AztecAddress: participant, // The L2 Aztec Address of the interacting contract
   bytes256: MessageData,     // The raw bytes being passed (256 bytes padded with zeros)
@@ -64,7 +64,7 @@ A message being passed between the two "chains" have the following form:
 ```
 Because we keep track of the pairs in the Rolodex on L1, we can at the time of rollup execution ensure that the message is always from/to the matching L1 portal contract. This is mainly a useful slight of hand, as the Aztec Rollup don't need to keep track of the pairs, it can rely on the ethereum contract performing that task. 
 
-To create an upper bound on the proving cost for including individual messages, the `MessageData` is limited to be 256 bytes (8 words) padded with zeros. This makes the full message be 9 words long. If more data is to be passed, it can either be split across multiple messages, or a commitment to the message could be computed and passed along.
+To create an upper bound on the proving cost for including individual messages, the `MessageData` is limited to be 256 bytes (8 words) padded with zeros. This makes the full message be 9 words long. If more data is to be passed, it can either be split across multiple messages, or a commitment to the message could be computed and passed along, see split example later on.
 
 > Inserting new pairs into the rolodex is a separate problem, not covered in this document.
 
@@ -245,6 +245,8 @@ A bridge is only as good as its ability to reclaim assets pledged to the other c
 
 ![Uniswap](./figures/uniswap.png)
 
+## Split 
+> See `SplitPortal.sol`. To handle variable size calldata, the implementation is committing and sending these commitments across the wire.
 
 # What does the Rollup See 
 # What does the L1 Contract see

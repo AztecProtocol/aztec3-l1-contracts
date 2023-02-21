@@ -32,7 +32,7 @@ contract Outbox is MessageBox {
    * @return The key of the entry in the set
    */
   function computeEntryKey(address _portal, bytes memory _content) public pure returns (bytes32) {
-    return keccak256(abi.encode(_portal, _content));
+    return keccak256(abi.encode(_portal, _padEntry(_content)));
   }
 
   /**

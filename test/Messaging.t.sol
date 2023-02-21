@@ -169,10 +169,10 @@ contract Messaging is Test {
       // Prepare the split execution message
       {
         contents[1] = abi.encodeWithSignature(
-          "split(address,address[],uint256[],address)",
+          "split(address,bytes32,bytes32,address)",
           address(tokenPortal1),
-          recipients,
-          amounts,
+          keccak256(abi.encode(recipients)),
+          keccak256(abi.encode(amounts)),
           address(0)
         );
 

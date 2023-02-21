@@ -45,8 +45,8 @@ contract Inbox is MessageBox {
     public
     pure
     returns (bytes32)
-  {
-    return keccak256(abi.encode(_portal, _deadline, _fee, _content));
+  { 
+    return keccak256(abi.encode(_portal, _deadline, _fee, _padEntry(_content)));
   }
 
   /**
