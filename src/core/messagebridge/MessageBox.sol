@@ -11,7 +11,7 @@ abstract contract MessageBox {
   error NothingToConsume(bytes32 entryKey);
   error OversizedContent();
 
-  uint256 constant public MESSAGE_SIZE = 256;
+  uint256 public constant MESSAGE_SIZE = 256;
 
   /**
    * @dev Entry struct - Done as struct to easily support extensions if needed
@@ -62,18 +62,16 @@ abstract contract MessageBox {
     return entries[_entryKey].count > 0;
   }
 
-  function _padEntry(
-    bytes memory _content
-  ) internal pure returns(bytes memory){
-     if (_content.length > MESSAGE_SIZE) revert OversizedContent();
-    
-    if (_content.length == MESSAGE_SIZE){
+  function _padEntry(bytes memory _content) internal pure returns (bytes memory) {
+    if (_content.length > MESSAGE_SIZE) revert OversizedContent();
+
+    if (_content.length == MESSAGE_SIZE) {
       return _content;
     }
 
     bytes memory content = new bytes(MESSAGE_SIZE);
     // Horrible, but lets do this for now just to try stuff.
-    for(uint256 i = 0 ; i< _content.length; i++){
+    for (uint256 i = 0; i < _content.length; i++) {
       content[i] = _content[i];
     }
     return content;

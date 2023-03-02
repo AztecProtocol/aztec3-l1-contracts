@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.18;
 
-import {Rolodex} from "./messagebridge/Rolodex.sol";
-import {Inbox} from "./messagebridge/Inbox.sol";
-import {Outbox} from "./messagebridge/Outbox.sol";
+import {Rolodex} from "../messagebridge/Rolodex.sol";
+import {Inbox} from "../messagebridge/Inbox.sol";
+import {Outbox} from "../messagebridge/Outbox.sol";
 
-contract Rollup {
+contract MessageRollup {
   error InvalidFormat();
   error InvalidEntry();
 
@@ -28,8 +28,6 @@ contract Rollup {
   function linkPortal(address _portal, bytes32 _l2Address) public returns (bool) {
     return ROLODEX.addLink(_portal, _l2Address);
   }
-
-  // Note: Using l2Addresses for the things interacting directly with the rollup as this seemed like something that could make the interacting easier as rollup circuit should not deal to much with the L1 addresses, the contract does that for it.
 
   function chugMessages(
     address _feeBeneficiary,

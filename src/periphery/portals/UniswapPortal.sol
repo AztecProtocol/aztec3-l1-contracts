@@ -4,9 +4,9 @@ pragma solidity >=0.8.18;
 import {IERC20} from "@oz/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@oz/token/ERC20/utils/SafeERC20.sol";
 
-import {Rollup} from "../Rollup.sol";
-import {Inbox} from "../messagebridge/Inbox.sol";
-import {Outbox} from "../messagebridge/Outbox.sol";
+import {MessageRollup} from "@aztec3/core/Rollup/MessageRollup.sol";
+import {Inbox} from "@aztec3/core/messagebridge/Inbox.sol";
+import {Outbox} from "@aztec3/core/messagebridge/Outbox.sol";
 import {TokenPortal} from "./TokenPortal.sol";
 
 import {ISwapRouter} from "../external/ISwapRouter.sol";
@@ -26,7 +26,7 @@ contract UniswapPortal {
   Inbox public immutable INBOX;
   Outbox public immutable OUTBOX;
 
-  constructor(Rollup _rollup) {
+  constructor(MessageRollup _rollup) {
     INBOX = _rollup.INBOX();
     OUTBOX = _rollup.OUTBOX();
   }
