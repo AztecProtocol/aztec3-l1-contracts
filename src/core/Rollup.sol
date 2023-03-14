@@ -12,9 +12,9 @@ pragma solidity >=0.8.18;
 contract Rollup {
   event L2BlockProcessed(uint256 indexed blockNum);
 
-  uint256 public latestBlockNum = 0;
+  uint256 public nextBlockNum = 0;
 
   function processRollup() external {
-    emit L2BlockProcessed(latestBlockNum++);
+    emit L2BlockProcessed(nextBlockNum++);
   }
 }

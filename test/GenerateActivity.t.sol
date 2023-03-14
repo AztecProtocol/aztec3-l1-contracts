@@ -12,7 +12,7 @@ contract GenerateActivityTest is Test {
   Rollup internal constant ROLLUP = Rollup(0x5FbDB2315678afecb367f032d93F642f64180aa3);
   Yeeter internal constant YEETER = Yeeter(0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512);
 
-  function _setUp() public {
+  function setUp() public {
     // check if there is no code at ROLLUP address
     if (address(ROLLUP).code.length == 0) {
       vm.broadcast();
@@ -29,14 +29,12 @@ contract GenerateActivityTest is Test {
   }
 
   function testGenerateActivity() public {
-    _setUp();
-    emit log_uint(ROLLUP.latestBlockNum());
     for (uint256 i = 0; i < 5; i++) {
       vm.startBroadcast();
       ROLLUP.processRollup();
-      YEETER.yeet(ROLLUP.latestBlockNum(), bytes(""));
+      YEETER.yeet(ROLLUP.nextBlockNum() - 1, bytes("random blabber"));
       vm.stopBroadcast();
-      emit log_named_uint("Settled block", ROLLUP.latestBlockNum());
+      emit log_named_uint("Settled block", ROLLUP.nextBlockNum() - 1);
     }
   }
 }
