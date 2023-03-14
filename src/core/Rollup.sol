@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.18;
 
-import {MockVerifier} from "@aztec3/mock/MockVerifier.sol";
-
-import {Decoder} from "./Decoder.sol";
-
 /**
  * @title Rollup
  * @author LHerskind
@@ -13,38 +9,12 @@ import {Decoder} from "./Decoder.sol";
  *
  * Work in progress
  */
-contract Rollup is Decoder {
-  error InvalidStateHash(bytes32 expected, bytes32 actual);
-  error InvalidProof();
+contract Rollup {
+  event L2BlockProcessed(uint256 indexed blockNum);
 
-  event RollupBlockProcessed(uint256 indexed rollupBlockNumber);
+  uint256 public latestBlockNum = 0;
 
-  MockVerifier public immutable verifier;
-
-  bytes32 public rollupStateHash;
-
-  constructor() {
-    verifier = new MockVerifier();
-  }
-
-  function processRollup(bytes memory _proof, bytes memory _inputs) external {
-    (uint256 rollupBlockNumber, bytes32 oldStateHash, bytes32 newStateHash, bytes32 publicInputHash)
-    = _decode(_inputs);
-
-    // @todo Proper genesis state. If the state is empty, we allow anything for now.
-    if (rollupStateHash != bytes32(0) && rollupStateHash != oldStateHash) {
-      revert InvalidStateHash(rollupStateHash, oldStateHash);
-    }
-
-    bytes32[] memory publicInputs = new bytes32[](1);
-    publicInputs[0] = publicInputHash;
-
-    if (!verifier.verify(_proof, publicInputs)) {
-      revert InvalidProof();
-    }
-
-    rollupStateHash = newStateHash;
-
-    emit RollupBlockProcessed(rollupBlockNumber);
+  function processRollup() external {
+    emit L2BlockProcessed(latestBlockNum++);
   }
 }
