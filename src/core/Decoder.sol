@@ -49,7 +49,7 @@ import {Test} from "forge-std/Test.sol";
  *
  * note: there is currently no padding of the elements, so we are for now assuming nice trees as inputs.
  */
-contract Decoder is Test {
+contract Decoder {
     /**
      * @notice Decodes the inputs and computes values to check state against
      * @param _inputData - The inputs of the rollup block.
