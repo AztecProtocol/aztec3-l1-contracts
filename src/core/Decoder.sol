@@ -10,12 +10,12 @@ import {Test} from "forge-std/Test.sol";
  * not giving a damn about gas costs.
  *
  * -------------------
- * Data specification
+ * L2 Block Data specification
  * -------------------
  *
  *  | byte start               | num bytes  | name
  *  | ---                      | ---        | ---
- *  | 0x00                     | 0x04       | l2 block number
+ *  | 0x00                     | 0x04       | L2 block number
  *  | 0x04                     | 0x04       | startPrivateDataTreeSnapshot.nextAvailableLeafIndex
  *  | 0x08                     | 0x20       | startPrivateDataTreeSnapshot.root
  *  | 0x28                     | 0x04       | startNullifierTreeSnapshot.nextAvailableLeafIndex
@@ -52,13 +52,13 @@ import {Test} from "forge-std/Test.sol";
 contract Decoder {
   /**
    * @notice Decodes the inputs and computes values to check state against
-   * @param _inputData - The inputs of the l2 block.
-   * @return l2BlockNumber  - The l2 block number.
+   * @param _l2Block - The L2 block calldata.
+   * @return l2BlockNumber  - The L2 block number.
    * @return oldStateHash - The state hash expected prior the execution.
    * @return newStateHash - The state hash expected after the execution.
    * @return publicInputHash - The hash of the public inputs
    */
-  function _decode(bytes memory _inputData)
+  function _decode(bytes memory _l2Block)
     internal
     view
     returns (
@@ -68,35 +68,35 @@ contract Decoder {
       bytes32 publicInputHash
     )
   {
-    l2BlockNumber = _getL2BlockNumber(_inputData);
-    oldStateHash = _computeStateHash(l2BlockNumber - 1, 0x4, _inputData);
-    newStateHash = _computeStateHash(l2BlockNumber, 0xb8, _inputData);
-    publicInputHash = _computePublicInputsHash(_inputData);
+    l2BlockNumber = _getL2BlockNumber(_l2Block);
+    oldStateHash = _computeStateHash(l2BlockNumber - 1, 0x4, _l2Block);
+    newStateHash = _computeStateHash(l2BlockNumber, 0xb8, _l2Block);
+    publicInputHash = _computePublicInputsHash(_l2Block);
   }
 
   /**
    * Computes a hash of the public inputs from the calldata
-   * @param _inputData - The l2 block calldata.
+   * @param _l2Block - The L2 block calldata.
    * @return sha256(header[:0x16c], newCommitmentHash, newNullifierHash, contractHash, contractDataHash)
    */
-  function _computePublicInputsHash(bytes memory _inputData) internal view returns (bytes32) {
+  function _computePublicInputsHash(bytes memory _l2Block) internal view returns (bytes32) {
     (uint256 commitmentCount, bytes32 newCommitmentHash) =
-      _computeCommitmentsOrNullifierRoot(_inputData, 0x16c);
+      _computeCommitmentsOrNullifierRoot(_l2Block, 0x16c);
     // emit log_named_uint("commitmentCount", commitmentCount);
     // emit log_named_bytes32("newCommitmentHash", newCommitmentHash);
 
     (uint256 nullifierCount, bytes32 newNullifierHash) =
-      _computeCommitmentsOrNullifierRoot(_inputData, 0x170 + commitmentCount * 0x20);
+      _computeCommitmentsOrNullifierRoot(_l2Block, 0x170 + commitmentCount * 0x20);
     // emit log_named_uint("nullifierCount", nullifierCount);
     // emit log_named_bytes32("newNullifierHash", newNullifierHash);
 
     (uint256 contractCount, bytes32 contractHash) =
-      _computeContractsRoot(_inputData, 0x174 + (commitmentCount + nullifierCount) * 0x20);
+      _computeContractsRoot(_l2Block, 0x174 + (commitmentCount + nullifierCount) * 0x20);
     // emit log_named_uint("contractCount", contractCount);
     // emit log_named_bytes32("contractHash", contractHash);
 
     bytes32 contractDataHash = _computeContractsDataRoot(
-      _inputData, 0x174 + (commitmentCount + nullifierCount + contractCount) * 0x20, contractCount
+      _l2Block, 0x174 + (commitmentCount + nullifierCount + contractCount) * 0x20, contractCount
     );
     // emit log_named_bytes32("contractDataHash", contractDataHash);
 
@@ -104,7 +104,7 @@ contract Decoder {
     uint256 size = 0x16c + 0x20 * 4;
     bytes memory temp = new bytes(size);
     assembly {
-      pop(staticcall(gas(), 0x4, add(_inputData, 0x20), size, add(temp, 0x20), size))
+      pop(staticcall(gas(), 0x4, add(_l2Block, 0x20), size, add(temp, 0x20), size))
     }
 
     // Overwrite the last 4 words
@@ -124,24 +124,24 @@ contract Decoder {
   }
 
   /**
-   * @notice Extract the l2 block number from the inputs
-   * @param _inputData - The l2 block calldata
-   * @return l2BlockNumber - The l2 block number
+   * @notice Extract the L2 block number from the block
+   * @param _l2Block - The L2 block calldata
+   * @return l2BlockNumber - The L2 block number
    */
-  function _getL2BlockNumber(bytes memory _inputData) internal pure returns (uint256 l2BlockNumber) {
+  function _getL2BlockNumber(bytes memory _l2Block) internal pure returns (uint256 l2BlockNumber) {
     assembly {
-      l2BlockNumber := and(shr(224, mload(add(_inputData, 0x20))), 0xffffffff)
+      l2BlockNumber := and(shr(224, mload(add(_l2Block, 0x20))), 0xffffffff)
     }
   }
 
   /**
    * @notice Computes a state hash
-   * @param _l2BlockNumber - The l2 block number
+   * @param _l2BlockNumber - The L2 block number
    * @param _offset - The offset into the data, 0x04 for old, 0xb8 for next
-   * @param _inputData - The calldata for the l2 block
+   * @param _l2Block - The L2 block calldata.
    * @return The state hash
    */
-  function _computeStateHash(uint256 _l2BlockNumber, uint256 _offset, bytes memory _inputData)
+  function _computeStateHash(uint256 _l2BlockNumber, uint256 _offset, bytes memory _l2Block)
     internal
     view
     returns (bytes32)
@@ -155,7 +155,7 @@ contract Decoder {
       mstore8(add(temp, 0x23), _l2BlockNumber)
     }
     assembly {
-      pop(staticcall(gas(), 0x4, add(_inputData, add(0x20, _offset)), 0xb4, add(temp, 0x24), 0xb4))
+      pop(staticcall(gas(), 0x4, add(_l2Block, add(0x20, _offset)), 0xb4, add(temp, 0x24), 0xb4))
     }
 
     return sha256(temp);
@@ -163,17 +163,17 @@ contract Decoder {
 
   /**
    * @notice Computes a root of a commitment or nullifier subtree
-   * @param _inputData - The raw input bytes as specified above.
+   * @param _l2Block - The L2 block calldata.
    * @param _offset - The offset to land at "len(newCommits)" or "len(newNullifiers)"
    */
-  function _computeCommitmentsOrNullifierRoot(bytes memory _inputData, uint256 _offset)
+  function _computeCommitmentsOrNullifierRoot(bytes memory _l2Block, uint256 _offset)
     internal
     view
     returns (uint256 size, bytes32)
   {
     uint256 elementsPerLeaf = 8;
     assembly {
-      size := and(shr(224, mload(add(_inputData, add(_offset, 0x20)))), 0xffffffff)
+      size := and(shr(224, mload(add(_l2Block, add(_offset, 0x20)))), 0xffffffff)
     }
 
     // Compute the leafs. Each leaf is 8 elements
@@ -181,9 +181,9 @@ contract Decoder {
     for (uint256 i = 0; i < size / elementsPerLeaf; i++) {
       uint256 src = 0x04 + 0x20 + _offset + i * 8 * 0x20;
       bytes memory inputValue = new bytes(0x100);
-      // inputValue = _inputData[src:src+256]
+      // inputValue = _l2Block[src:src+256]
       assembly {
-        pop(staticcall(gas(), 0x4, add(_inputData, src), 0x100, add(inputValue, 0x20), 0x100))
+        pop(staticcall(gas(), 0x4, add(_l2Block, src), 0x100, add(inputValue, 0x20), 0x100))
       }
       leafs[i] = sha256(inputValue);
     }
@@ -196,27 +196,27 @@ contract Decoder {
   /**
    * @notice Computes the root for the contracts data tree.
    * @dev Two contracts elements are hashed together to get a leaf.
-   * @param _inputData - The l2 block calldata.
+   * @param _l2Block - The L2 block calldata.
    * @param _offset - The offset to where the contracts data begins
    * @return size - The number of elements in the contracts leaf list
    * @return The root of the contracts tree
    */
-  function _computeContractsRoot(bytes memory _inputData, uint256 _offset)
+  function _computeContractsRoot(bytes memory _l2Block, uint256 _offset)
     internal
     view
     returns (uint256 size, bytes32)
   {
     uint256 elementsPerLeaf = 2;
     assembly {
-      size := and(shr(224, mload(add(_inputData, add(_offset, 0x20)))), 0xffffffff)
+      size := and(shr(224, mload(add(_l2Block, add(_offset, 0x20)))), 0xffffffff)
     }
     bytes32[] memory leafs = new bytes32[](size / elementsPerLeaf);
     for (uint256 i = 0; i < size / elementsPerLeaf; i++) {
       uint256 src = 0x04 + 0x20 + _offset + i * 0x40;
       bytes memory inputValue = new bytes(0x40);
-      // inputValue = _inputData[src:src+64]
+      // inputValue = _l2Block[src:src+64]
       assembly {
-        pop(staticcall(gas(), 0x4, add(_inputData, src), 0x40, add(inputValue, 0x20), 0x40))
+        pop(staticcall(gas(), 0x4, add(_l2Block, src), 0x40, add(inputValue, 0x20), 0x40))
       }
       leafs[i] = sha256(inputValue);
     }
@@ -227,12 +227,12 @@ contract Decoder {
   /**
    * @notice Computes the root for the contracts data tree.
    * @dev Two contracts data elements are hashed together to get a leaf.
-   * @param _inputData - The l2 block calldata.
+   * @param _l2Block - The L2 block calldata.
    * @param _offset - The offset to where the contracts data begins
    * @param _size - The number of elements in the contracts data list
    * @return The root of the contracts data tree
    */
-  function _computeContractsDataRoot(bytes memory _inputData, uint256 _offset, uint256 _size)
+  function _computeContractsDataRoot(bytes memory _l2Block, uint256 _offset, uint256 _size)
     internal
     view
     returns (bytes32)
@@ -242,9 +242,9 @@ contract Decoder {
     for (uint256 i = 0; i < _size / elementsPerLeaf; i++) {
       uint256 src = 0x04 + 0x20 + _offset + i * 0x68;
       bytes memory inputValue = new bytes(0x68);
-      // inputValue = _inputData[src:src+104]
+      // inputValue = _l2Block[src:src+104]
       assembly {
-        pop(staticcall(gas(), 0x4, add(_inputData, src), 0x68, add(inputValue, 0x20), 0x68))
+        pop(staticcall(gas(), 0x4, add(_l2Block, src), 0x68, add(inputValue, 0x20), 0x68))
       }
       leafs[i] = sha256(inputValue);
     }
