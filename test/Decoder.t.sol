@@ -18,7 +18,7 @@ contract DecoderTest is Test {
   }
 
   function testDecoder() public {
-    rollup.processRollup(bytes(""), block_1);
-    rollup.processRollup(bytes(""), block_2);
+    rollup.process(bytes(""), block_1);
+    rollup.process(bytes(""), block_2);
   }
 }
