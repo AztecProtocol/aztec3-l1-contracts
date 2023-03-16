@@ -31,8 +31,8 @@ contract Rollup is Decoder {
    * @param _l2Block - The L2Block data, formatted as outlined in `Decoder.sol`
    */
   function process(bytes memory _proof, bytes memory _l2Block) external {
-    (uint256 rollupBlockNumber, bytes32 oldStateHash, bytes32 newStateHash, bytes32 publicInputHash)
-    = _decode(_l2Block);
+    (uint256 l2BlockNumber, bytes32 oldStateHash, bytes32 newStateHash, bytes32 publicInputHash) =
+      _decode(_l2Block);
 
     // @todo Proper genesis state. If the state is empty, we allow anything for now.
     if (rollupStateHash != bytes32(0) && rollupStateHash != oldStateHash) {
@@ -48,6 +48,6 @@ contract Rollup is Decoder {
 
     rollupStateHash = newStateHash;
 
-    emit L2BlockProcessed(rollupBlockNumber);
+    emit L2BlockProcessed(l2BlockNumber);
   }
 }

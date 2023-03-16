@@ -6,7 +6,7 @@ import {Test} from "forge-std/Test.sol";
 /**
  * @title Decoder
  * @author LHerskind
- * @notice Decoding a rollup block, concerned with readability and velocity of development
+ * @notice Decoding a L2 block, concerned with readability and velocity of development
  * not giving a damn about gas costs.
  *
  * -------------------
@@ -15,7 +15,7 @@ import {Test} from "forge-std/Test.sol";
  *
  *  | byte start               | num bytes  | name
  *  | ---                      | ---        | ---
- *  | 0x00                     | 0x04       | rollup block number
+ *  | 0x00                     | 0x04       | l2 block number
  *  | 0x04                     | 0x04       | startPrivateDataTreeSnapshot.nextAvailableLeafIndex
  *  | 0x08                     | 0x20       | startPrivateDataTreeSnapshot.root
  *  | 0x28                     | 0x04       | startNullifierTreeSnapshot.nextAvailableLeafIndex
@@ -52,8 +52,8 @@ import {Test} from "forge-std/Test.sol";
 contract Decoder {
   /**
    * @notice Decodes the inputs and computes values to check state against
-   * @param _inputData - The inputs of the rollup block.
-   * @return rollupBlockNumber  - The Rollup block number.
+   * @param _inputData - The inputs of the l2 block.
+   * @return l2BlockNumber  - The l2 block number.
    * @return oldStateHash - The state hash expected prior the execution.
    * @return newStateHash - The state hash expected after the execution.
    * @return publicInputHash - The hash of the public inputs
@@ -62,21 +62,21 @@ contract Decoder {
     internal
     view
     returns (
-      uint256 rollupBlockNumber,
+      uint256 l2BlockNumber,
       bytes32 oldStateHash,
       bytes32 newStateHash,
       bytes32 publicInputHash
     )
   {
-    rollupBlockNumber = _getRollupBlockNumber(_inputData);
-    oldStateHash = _computeStateHash(rollupBlockNumber - 1, 0x4, _inputData);
-    newStateHash = _computeStateHash(rollupBlockNumber, 0xb8, _inputData);
+    l2BlockNumber = _getL2BlockNumber(_inputData);
+    oldStateHash = _computeStateHash(l2BlockNumber - 1, 0x4, _inputData);
+    newStateHash = _computeStateHash(l2BlockNumber, 0xb8, _inputData);
     publicInputHash = _computePublicInputsHash(_inputData);
   }
 
   /**
    * Computes a hash of the public inputs from the calldata
-   * @param _inputData - The rollup block calldata.
+   * @param _inputData - The l2 block calldata.
    * @return sha256(header[:0x16c], newCommitmentHash, newNullifierHash, contractHash, contractDataHash)
    */
   function _computePublicInputsHash(bytes memory _inputData) internal view returns (bytes32) {
@@ -101,7 +101,6 @@ contract Decoder {
     // emit log_named_bytes32("contractDataHash", contractDataHash);
 
     // Compute the public inputs hash
-
     uint256 size = 0x16c + 0x20 * 4;
     bytes memory temp = new bytes(size);
     assembly {
@@ -125,28 +124,24 @@ contract Decoder {
   }
 
   /**
-   * @notice Extract the rollup block number from the inputs
-   * @param _inputData - The rollup block calldata
-   * @return rollupBlockNumber - The blocknumber
+   * @notice Extract the l2 block number from the inputs
+   * @param _inputData - The l2 block calldata
+   * @return l2BlockNumber - The l2 block number
    */
-  function _getRollupBlockNumber(bytes memory _inputData)
-    internal
-    pure
-    returns (uint256 rollupBlockNumber)
-  {
+  function _getL2BlockNumber(bytes memory _inputData) internal pure returns (uint256 l2BlockNumber) {
     assembly {
-      rollupBlockNumber := and(shr(224, mload(add(_inputData, 0x20))), 0xffffffff)
+      l2BlockNumber := and(shr(224, mload(add(_inputData, 0x20))), 0xffffffff)
     }
   }
 
   /**
    * @notice Computes a state hash
-   * @param _rollupBlockNumber - The rollup block number
+   * @param _l2BlockNumber - The l2 block number
    * @param _offset - The offset into the data, 0x04 for old, 0xb8 for next
-   * @param _inputData - The calldata for the rollup block
+   * @param _inputData - The calldata for the l2 block
    * @return The state hash
    */
-  function _computeStateHash(uint256 _rollupBlockNumber, uint256 _offset, bytes memory _inputData)
+  function _computeStateHash(uint256 _l2BlockNumber, uint256 _offset, bytes memory _inputData)
     internal
     view
     returns (bytes32)
@@ -154,10 +149,10 @@ contract Decoder {
     bytes memory temp = new bytes(0xb8);
 
     assembly {
-      mstore8(add(temp, 0x20), shr(24, _rollupBlockNumber))
-      mstore8(add(temp, 0x21), shr(16, _rollupBlockNumber))
-      mstore8(add(temp, 0x22), shr(8, _rollupBlockNumber))
-      mstore8(add(temp, 0x23), _rollupBlockNumber)
+      mstore8(add(temp, 0x20), shr(24, _l2BlockNumber))
+      mstore8(add(temp, 0x21), shr(16, _l2BlockNumber))
+      mstore8(add(temp, 0x22), shr(8, _l2BlockNumber))
+      mstore8(add(temp, 0x23), _l2BlockNumber)
     }
     assembly {
       pop(staticcall(gas(), 0x4, add(_inputData, add(0x20, _offset)), 0xb4, add(temp, 0x24), 0xb4))
@@ -201,7 +196,7 @@ contract Decoder {
   /**
    * @notice Computes the root for the contracts data tree.
    * @dev Two contracts elements are hashed together to get a leaf.
-   * @param _inputData - The rollup block calldata.
+   * @param _inputData - The l2 block calldata.
    * @param _offset - The offset to where the contracts data begins
    * @return size - The number of elements in the contracts leaf list
    * @return The root of the contracts tree
@@ -232,7 +227,7 @@ contract Decoder {
   /**
    * @notice Computes the root for the contracts data tree.
    * @dev Two contracts data elements are hashed together to get a leaf.
-   * @param _inputData - The rollup block calldata.
+   * @param _inputData - The l2 block calldata.
    * @param _offset - The offset to where the contracts data begins
    * @param _size - The number of elements in the contracts data list
    * @return The root of the contracts data tree
