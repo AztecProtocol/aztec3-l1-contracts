@@ -247,7 +247,7 @@ contract Decoder {
     for (uint256 i = 0; i < _size / elementsPerLeaf; i++) {
       uint256 src = 0x04 + 0x20 + _offset + i * 0x68;
       bytes memory inputValue = new bytes(0x68);
-      // inputValue = _inputData[src:src+108]
+      // inputValue = _inputData[src:src+104]
       assembly {
         pop(staticcall(gas(), 0x4, add(_inputData, src), 0x68, add(inputValue, 0x20), 0x68))
       }
