@@ -2,7 +2,6 @@
 pragma solidity >=0.8.18;
 
 import {MockVerifier} from "@aztec3/mock/MockVerifier.sol";
-
 import {Decoder} from "./Decoder.sol";
 
 /**
@@ -17,19 +16,23 @@ contract Rollup is Decoder {
   error InvalidStateHash(bytes32 expected, bytes32 actual);
   error InvalidProof();
 
-  event RollupBlockProcessed(uint256 indexed rollupBlockNumber);
+  event L2BlockProcessed(uint256 indexed blockNum);
 
-  MockVerifier public immutable verifier;
-
+  MockVerifier public immutable VERIFIER;
   bytes32 public rollupStateHash;
 
   constructor() {
-    verifier = new MockVerifier();
+    VERIFIER = new MockVerifier();
   }
 
-  function processRollup(bytes memory _proof, bytes memory _inputs) external {
-    (uint256 rollupBlockNumber, bytes32 oldStateHash, bytes32 newStateHash, bytes32 publicInputHash)
-    = _decode(_inputs);
+  /**
+   * @notice Process an incoming L2Block and progress the state
+   * @param _proof - The proof of correct execution
+   * @param _l2Block - The L2Block data, formatted as outlined in `Decoder.sol`
+   */
+  function process(bytes memory _proof, bytes memory _l2Block) external {
+    (uint256 l2BlockNumber, bytes32 oldStateHash, bytes32 newStateHash, bytes32 publicInputHash) =
+      _decode(_l2Block);
 
     // @todo Proper genesis state. If the state is empty, we allow anything for now.
     if (rollupStateHash != bytes32(0) && rollupStateHash != oldStateHash) {
@@ -39,12 +42,12 @@ contract Rollup is Decoder {
     bytes32[] memory publicInputs = new bytes32[](1);
     publicInputs[0] = publicInputHash;
 
-    if (!verifier.verify(_proof, publicInputs)) {
+    if (!VERIFIER.verify(_proof, publicInputs)) {
       revert InvalidProof();
     }
 
     rollupStateHash = newStateHash;
 
-    emit RollupBlockProcessed(rollupBlockNumber);
+    emit L2BlockProcessed(l2BlockNumber);
   }
 }
