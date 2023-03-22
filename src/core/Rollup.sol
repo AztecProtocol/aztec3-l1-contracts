@@ -20,6 +20,7 @@ contract Rollup is Decoder {
 
   MockVerifier public immutable VERIFIER;
   bytes32 public rollupStateHash;
+  uint256 public rollupBlockNumber;
 
   constructor() {
     VERIFIER = new MockVerifier();
@@ -47,6 +48,7 @@ contract Rollup is Decoder {
     }
 
     rollupStateHash = newStateHash;
+    rollupBlockNumber = l2BlockNumber;
 
     emit L2BlockProcessed(l2BlockNumber);
   }
