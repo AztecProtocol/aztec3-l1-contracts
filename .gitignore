@@ -11,3 +11,6 @@ out/
 .env
 
 lcov.info
+
+# Local foundry env
+.foundry
