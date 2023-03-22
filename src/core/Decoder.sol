@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity >=0.8.18;
 
-import {Test} from "forge-std/Test.sol";
-
 /**
  * @title Decoder
  * @author LHerskind
  * @notice Decoding a L2 block, concerned with readability and velocity of development
  * not giving a damn about gas costs.
+ * @dev there is currently no padding of the elements, so we are for now assuming nice trees as inputs.
+ * Furthermore, if no contract etc are deployed, we expect there to be address(0) for input.
  *
  * -------------------
  * L2 Block Data specification
@@ -45,11 +45,11 @@ import {Test} from "forge-std/Test.sol";
  *  | 0x178 + x + y + z        | z          | newContractData
  *  |---                       |---         | ---
  *
- * At this stage, we are not super concerned about the gas usage. So we will be making implementation that use more than necessary memory to make it simpler to change later on
- *
- * note: there is currently no padding of the elements, so we are for now assuming nice trees as inputs.
  */
 contract Decoder {
+  uint256 internal constant COMMITMENTS_PER_KERNEL = 4;
+  uint256 internal constant NULLIFIERS_PER_KERNEL = 4;
+
   /**
    * @notice Decodes the inputs and computes values to check state against
    * @param _l2Block - The L2 block calldata.
@@ -58,9 +58,9 @@ contract Decoder {
    * @return newStateHash - The state hash expected after the execution.
    * @return publicInputHash - The hash of the public inputs
    */
-  function _decode(bytes memory _l2Block)
+  function _decode(bytes calldata _l2Block)
     internal
-    view
+    pure
     returns (
       uint256 l2BlockNumber,
       bytes32 oldStateHash,
@@ -69,6 +69,8 @@ contract Decoder {
     )
   {
     l2BlockNumber = _getL2BlockNumber(_l2Block);
+    // Note, for oldStateHash to match the storage, the l2 block number must be new - 1.
+    // Only jumping 1 block at a time.
     oldStateHash = _computeStateHash(l2BlockNumber - 1, 0x4, _l2Block);
     newStateHash = _computeStateHash(l2BlockNumber, 0xb8, _l2Block);
     publicInputHash = _computePublicInputsHash(_l2Block);
@@ -77,49 +79,20 @@ contract Decoder {
   /**
    * Computes a hash of the public inputs from the calldata
    * @param _l2Block - The L2 block calldata.
-   * @return sha256(header[:0x16c], newCommitmentHash, newNullifierHash, contractHash, contractDataHash)
+   * @return sha256(header[:0x16c], diffRoot)
    */
-  function _computePublicInputsHash(bytes memory _l2Block) internal view returns (bytes32) {
-    (uint256 commitmentCount, bytes32 newCommitmentHash) =
-      _computeCommitmentsOrNullifierRoot(_l2Block, 0x16c);
-    // emit log_named_uint("commitmentCount", commitmentCount);
-    // emit log_named_bytes32("newCommitmentHash", newCommitmentHash);
-
-    (uint256 nullifierCount, bytes32 newNullifierHash) =
-      _computeCommitmentsOrNullifierRoot(_l2Block, 0x170 + commitmentCount * 0x20);
-    // emit log_named_uint("nullifierCount", nullifierCount);
-    // emit log_named_bytes32("newNullifierHash", newNullifierHash);
-
-    (uint256 contractCount, bytes32 contractHash) =
-      _computeContractsRoot(_l2Block, 0x174 + (commitmentCount + nullifierCount) * 0x20);
-    // emit log_named_uint("contractCount", contractCount);
-    // emit log_named_bytes32("contractHash", contractHash);
-
-    bytes32 contractDataHash = _computeContractsDataRoot(
-      _l2Block, 0x174 + (commitmentCount + nullifierCount + contractCount) * 0x20, contractCount
-    );
-    // emit log_named_bytes32("contractDataHash", contractDataHash);
-
+  function _computePublicInputsHash(bytes calldata _l2Block) internal pure returns (bytes32) {
     // Compute the public inputs hash
-    uint256 size = 0x16c + 0x20 * 4;
+    uint256 size = 0x16c + 0x20;
     bytes memory temp = new bytes(size);
     assembly {
-      pop(staticcall(gas(), 0x4, add(_l2Block, 0x20), size, add(temp, 0x20), size))
+      calldatacopy(add(temp, 0x20), add(_l2Block.offset, 0x20), size)
     }
 
-    // Overwrite the last 4 words
-    uint256 offset = 0x16c + 0x20;
+    bytes32 diffRoot = _computeDiffRoot(_l2Block);
     assembly {
-      mstore(add(temp, offset), newNullifierHash)
-      offset := add(offset, 0x20)
-      mstore(add(temp, offset), newCommitmentHash)
-      offset := add(offset, 0x20)
-      mstore(add(temp, offset), contractHash)
-      offset := add(offset, 0x20)
-      mstore(add(temp, offset), contractDataHash)
-      offset := add(offset, 0x20)
+      mstore(add(temp, add(0x20, 0x16c)), diffRoot)
     }
-
     return sha256(temp);
   }
 
@@ -128,9 +101,9 @@ contract Decoder {
    * @param _l2Block - The L2 block calldata
    * @return l2BlockNumber - The L2 block number
    */
-  function _getL2BlockNumber(bytes memory _l2Block) internal pure returns (uint256 l2BlockNumber) {
+  function _getL2BlockNumber(bytes calldata _l2Block) internal pure returns (uint256 l2BlockNumber) {
     assembly {
-      l2BlockNumber := and(shr(224, mload(add(_l2Block, 0x20))), 0xffffffff)
+      l2BlockNumber := and(shr(224, calldataload(_l2Block.offset)), 0xffffffff)
     }
   }
 
@@ -141,9 +114,9 @@ contract Decoder {
    * @param _l2Block - The L2 block calldata.
    * @return The state hash
    */
-  function _computeStateHash(uint256 _l2BlockNumber, uint256 _offset, bytes memory _l2Block)
+  function _computeStateHash(uint256 _l2BlockNumber, uint256 _offset, bytes calldata _l2Block)
     internal
-    view
+    pure
     returns (bytes32)
   {
     bytes memory temp = new bytes(0xb8);
@@ -155,101 +128,109 @@ contract Decoder {
       mstore8(add(temp, 0x23), _l2BlockNumber)
     }
     assembly {
-      pop(staticcall(gas(), 0x4, add(_l2Block, add(0x20, _offset)), 0xb4, add(temp, 0x24), 0xb4))
+      calldatacopy(add(temp, 0x24), add(_l2Block.offset, _offset), 0xb4)
     }
 
     return sha256(temp);
   }
 
-  /**
-   * @notice Computes a root of a commitment or nullifier subtree
-   * @param _l2Block - The L2 block calldata.
-   * @param _offset - The offset to land at "len(newCommits)" or "len(newNullifiers)"
-   */
-  function _computeCommitmentsOrNullifierRoot(bytes memory _l2Block, uint256 _offset)
-    internal
-    view
-    returns (uint256 size, bytes32)
-  {
-    uint256 elementsPerLeaf = 8;
-    assembly {
-      size := and(shr(224, mload(add(_l2Block, add(_offset, 0x20)))), 0xffffffff)
-    }
-
-    // Compute the leafs. Each leaf is 8 elements
-    bytes32[] memory leafs = new bytes32[](size / elementsPerLeaf);
-    for (uint256 i = 0; i < size / elementsPerLeaf; i++) {
-      uint256 src = 0x04 + 0x20 + _offset + i * 8 * 0x20;
-      bytes memory inputValue = new bytes(0x100);
-      // inputValue = _l2Block[src:src+256]
-      assembly {
-        pop(staticcall(gas(), 0x4, add(_l2Block, src), 0x100, add(inputValue, 0x20), 0x100))
-      }
-      leafs[i] = sha256(inputValue);
-    }
-
-    bytes32 root = _computeRoot(leafs);
-
-    return (size, root);
+  struct Vars {
+    uint256 commitmentCount;
+    uint256 kernelCount;
+    uint256 contractCount;
   }
 
   /**
-   * @notice Computes the root for the contracts data tree.
-   * @dev Two contracts elements are hashed together to get a leaf.
+   * @notice Creates a "diff" tree and compute its root
    * @param _l2Block - The L2 block calldata.
-   * @param _offset - The offset to where the contracts data begins
-   * @return size - The number of elements in the contracts leaf list
-   * @return The root of the contracts tree
+   * @return The root of the "diff" tree
    */
-  function _computeContractsRoot(bytes memory _l2Block, uint256 _offset)
-    internal
-    view
-    returns (uint256 size, bytes32)
-  {
-    uint256 elementsPerLeaf = 2;
-    assembly {
-      size := and(shr(224, mload(add(_l2Block, add(_offset, 0x20)))), 0xffffffff)
-    }
-    bytes32[] memory leafs = new bytes32[](size / elementsPerLeaf);
-    for (uint256 i = 0; i < size / elementsPerLeaf; i++) {
-      uint256 src = 0x04 + 0x20 + _offset + i * 0x40;
-      bytes memory inputValue = new bytes(0x40);
-      // inputValue = _l2Block[src:src+64]
+  function _computeDiffRoot(bytes calldata _l2Block) internal pure returns (bytes32) {
+    Vars memory vars;
+    {
+      uint256 commitmentCount;
       assembly {
-        pop(staticcall(gas(), 0x4, add(_l2Block, src), 0x40, add(inputValue, 0x20), 0x40))
+        commitmentCount := and(shr(224, calldataload(add(_l2Block.offset, 0x16c))), 0xffffffff)
       }
-      leafs[i] = sha256(inputValue);
-    }
+      vars.commitmentCount = commitmentCount;
+      vars.kernelCount = commitmentCount / COMMITMENTS_PER_KERNEL;
+      uint256 contractCountOffset =
+        vars.kernelCount * (COMMITMENTS_PER_KERNEL + NULLIFIERS_PER_KERNEL) * 0x20;
 
-    return (size, _computeRoot(leafs));
-  }
-
-  /**
-   * @notice Computes the root for the contracts data tree.
-   * @dev Two contracts data elements are hashed together to get a leaf.
-   * @param _l2Block - The L2 block calldata.
-   * @param _offset - The offset to where the contracts data begins
-   * @param _size - The number of elements in the contracts data list
-   * @return The root of the contracts data tree
-   */
-  function _computeContractsDataRoot(bytes memory _l2Block, uint256 _offset, uint256 _size)
-    internal
-    view
-    returns (bytes32)
-  {
-    uint256 elementsPerLeaf = 2;
-    bytes32[] memory leafs = new bytes32[](_size / elementsPerLeaf);
-    for (uint256 i = 0; i < _size / elementsPerLeaf; i++) {
-      uint256 src = 0x04 + 0x20 + _offset + i * 0x68;
-      bytes memory inputValue = new bytes(0x68);
-      // inputValue = _l2Block[src:src+104]
+      uint256 newContractCount;
       assembly {
-        pop(staticcall(gas(), 0x4, add(_l2Block, src), 0x68, add(inputValue, 0x20), 0x68))
+        newContractCount :=
+          and(
+            shr(224, calldataload(add(_l2Block.offset, add(0x174, contractCountOffset)))), 0xffffffff
+          )
       }
-      leafs[i] = sha256(inputValue);
+      vars.contractCount = newContractCount;
     }
 
-    return _computeRoot(leafs);
+    bytes32[] memory baseLeafs = new bytes32[](vars.kernelCount / 2);
+
+    uint256 dstCommitmentOffset = COMMITMENTS_PER_KERNEL * 0x20 * 0x2;
+    uint256 dstContractOffset = dstCommitmentOffset + NULLIFIERS_PER_KERNEL * 0x20 * 0x2;
+
+    uint256 srcCommitmentOffset = 0x170;
+    uint256 srcNullifierOffset = 0x174 + vars.commitmentCount * 0x20;
+    uint256 srcContractOffset =
+      0x178 + (baseLeafs.length * 2 * (NULLIFIERS_PER_KERNEL + COMMITMENTS_PER_KERNEL) * 0x20);
+    uint256 srcContractDataOffset = srcContractOffset + vars.contractCount * 0x20;
+
+    for (uint256 i = 0; i < baseLeafs.length; i++) {
+      /**
+       * Compute the leaf to insert.
+       * Leaf_i = (
+       *    newNullifiersKernel1,
+       *    newNullifiersKernel2,
+       *    newCommitmentsKernel1,
+       *    newCommitmentsKernel2,
+       *    newContractLeafKernel1,
+       *    newContractLeafKernel2,
+       *    newContractDataKernel1,
+       *    newContractDataKernel2
+       * );
+       * Note that we always read data, the l2Block (atm) must therefore include dummy or zero-notes for
+       * Zero values.
+       */
+      bytes memory baseLeaf = new bytes(0x2a8);
+
+      assembly {
+        // Adding new nullifiers
+        calldatacopy(add(baseLeaf, 0x20), add(_l2Block.offset, srcNullifierOffset), mul(0x08, 0x20))
+
+        // Adding new commitments
+        calldatacopy(
+          add(baseLeaf, add(0x20, dstCommitmentOffset)),
+          add(_l2Block.offset, srcCommitmentOffset),
+          mul(0x08, 0x20)
+        )
+
+        // Adding Contract Leafs
+        calldatacopy(
+          add(baseLeaf, add(0x20, dstContractOffset)),
+          add(_l2Block.offset, srcContractOffset),
+          mul(2, 0x20)
+        )
+
+        // Adding contract data
+        calldatacopy(
+          add(baseLeaf, add(0x20, add(dstContractOffset, 0x40))),
+          add(_l2Block.offset, srcContractDataOffset),
+          mul(2, 0x34)
+        )
+      }
+
+      srcCommitmentOffset += 2 * COMMITMENTS_PER_KERNEL * 0x20;
+      srcNullifierOffset += 2 * NULLIFIERS_PER_KERNEL * 0x20;
+      srcContractOffset += 2 * 0x20;
+      srcContractDataOffset += 2 * 0x34;
+
+      baseLeafs[i] = sha256(baseLeaf);
+    }
+
+    return _computeRoot(baseLeafs);
   }
 
   /**
