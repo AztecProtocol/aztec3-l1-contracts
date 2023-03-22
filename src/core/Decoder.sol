@@ -69,6 +69,8 @@ contract Decoder {
     )
   {
     l2BlockNumber = _getL2BlockNumber(_l2Block);
+    // Note, for oldStateHash to match the storage, the l2 block number must be new - 1.
+    // Only jumping 1 block at a time.
     oldStateHash = _computeStateHash(l2BlockNumber - 1, 0x4, _l2Block);
     newStateHash = _computeStateHash(l2BlockNumber, 0xb8, _l2Block);
     publicInputHash = _computePublicInputsHash(_l2Block);
@@ -165,59 +167,70 @@ contract Decoder {
       vars.contractCount = newContractCount;
     }
 
-    bytes32[] memory leafs = new bytes32[](vars.kernelCount / 2);
+    bytes32[] memory baseLeafs = new bytes32[](vars.kernelCount / 2);
 
-    uint256 dstNullifierOffset = NULLIFIERS_PER_KERNEL * 0x20 * 0x2;
-    uint256 dstContractOffset = dstNullifierOffset + COMMITMENTS_PER_KERNEL * 0x20 * 0x2;
+    uint256 dstCommitmentOffset = COMMITMENTS_PER_KERNEL * 0x20 * 0x2;
+    uint256 dstContractOffset = dstCommitmentOffset + NULLIFIERS_PER_KERNEL * 0x20 * 0x2;
 
     uint256 srcCommitmentOffset = 0x170;
     uint256 srcNullifierOffset = 0x174 + vars.commitmentCount * 0x20;
-
     uint256 srcContractOffset =
-      0x178 + (leafs.length * 2 * (NULLIFIERS_PER_KERNEL + COMMITMENTS_PER_KERNEL) * 0x20);
+      0x178 + (baseLeafs.length * 2 * (NULLIFIERS_PER_KERNEL + COMMITMENTS_PER_KERNEL) * 0x20);
     uint256 srcContractDataOffset = srcContractOffset + vars.contractCount * 0x20;
 
-    for (uint256 i = 0; i < leafs.length; i++) {
-      bytes memory temp = new bytes(0x2a8);
+    for (uint256 i = 0; i < baseLeafs.length; i++) {
+      /**
+       * Compute the leaf to insert.
+       * Leaf_i = (
+       *    newNullifiersKernel1,
+       *    newNullifiersKernel2,
+       *    newCommitmentsKernel1,
+       *    newCommitmentsKernel2,
+       *    newContractLeafKernel1,
+       *    newContractLeafKernel2,
+       *    newContractDataKernel1,
+       *    newContractDataKernel2
+       * );
+       * Note that we always read data, the l2Block (atm) must therefore include dummy or zero-notes for
+       * Zero values.
+       */
+      bytes memory baseLeaf = new bytes(0x2a8);
 
-      {
-        assembly {
-          // Adding new nullifiers
-          calldatacopy(add(temp, 0x20), add(_l2Block.offset, srcNullifierOffset), mul(0x08, 0x20))
+      assembly {
+        // Adding new nullifiers
+        calldatacopy(add(baseLeaf, 0x20), add(_l2Block.offset, srcNullifierOffset), mul(0x08, 0x20))
 
-          // Adding new commitments
-          calldatacopy(
-            add(temp, add(0x20, dstNullifierOffset)),
-            add(_l2Block.offset, srcCommitmentOffset),
-            mul(0x08, 0x20)
-          )
+        // Adding new commitments
+        calldatacopy(
+          add(baseLeaf, add(0x20, dstCommitmentOffset)),
+          add(_l2Block.offset, srcCommitmentOffset),
+          mul(0x08, 0x20)
+        )
 
-          // Adding Contract Leafs
-          calldatacopy(
-            add(temp, add(0x20, dstContractOffset)),
-            add(_l2Block.offset, srcContractOffset),
-            mul(2, 0x20)
-          )
+        // Adding Contract Leafs
+        calldatacopy(
+          add(baseLeaf, add(0x20, dstContractOffset)),
+          add(_l2Block.offset, srcContractOffset),
+          mul(2, 0x20)
+        )
 
-          // Adding contract data
-          calldatacopy(
-            add(temp, add(0x20, add(dstContractOffset, 0x40))),
-            add(_l2Block.offset, srcContractDataOffset),
-            mul(2, 0x34)
-          )
-        }
-
-        srcCommitmentOffset += 2 * COMMITMENTS_PER_KERNEL * 0x20;
-        srcNullifierOffset += 2 * NULLIFIERS_PER_KERNEL * 0x20;
-
-        srcContractOffset += 2 * 0x20;
-        srcContractDataOffset += 2 * 0x34;
+        // Adding contract data
+        calldatacopy(
+          add(baseLeaf, add(0x20, add(dstContractOffset, 0x40))),
+          add(_l2Block.offset, srcContractDataOffset),
+          mul(2, 0x34)
+        )
       }
 
-      leafs[i] = sha256(temp);
+      srcCommitmentOffset += 2 * COMMITMENTS_PER_KERNEL * 0x20;
+      srcNullifierOffset += 2 * NULLIFIERS_PER_KERNEL * 0x20;
+      srcContractOffset += 2 * 0x20;
+      srcContractDataOffset += 2 * 0x34;
+
+      baseLeafs[i] = sha256(baseLeaf);
     }
 
-    return _computeRoot(leafs);
+    return _computeRoot(baseLeafs);
   }
 
   /**

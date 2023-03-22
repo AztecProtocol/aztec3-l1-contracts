@@ -20,6 +20,7 @@ contract DecodeHelper is Decoder {
   }
 }
 
+// Blocks generated with https://gist.github.com/LHerskind/dccc762ee539b7b0984bf51af6f51dbb
 contract DecoderTest is Test {
   Rollup internal rollup;
   DecodeHelper internal helper;
