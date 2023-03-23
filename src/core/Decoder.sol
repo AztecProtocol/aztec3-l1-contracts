@@ -71,7 +71,7 @@ contract Decoder {
     l2BlockNumber = _getL2BlockNumber(_l2Block);
     // Note, for oldStateHash to match the storage, the l2 block number must be new - 1.
     // Only jumping 1 block at a time.
-    oldStateHash = _computeStateHash(l2BlockNumber - 1, 0x4, _l2Block);
+    oldStateHash = l2BlockNumber > 0 ? _computeStateHash(l2BlockNumber - 1, 0x4, _l2Block) : bytes32(0);
     newStateHash = _computeStateHash(l2BlockNumber, 0xb8, _l2Block);
     publicInputHash = _computePublicInputsHash(_l2Block);
   }
