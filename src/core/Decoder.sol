@@ -188,13 +188,15 @@ contract Decoder {
        *    newCommitmentsKernel2,
        *    newContractLeafKernel1,
        *    newContractLeafKernel2,
-       *    newContractDataKernel1,
-       *    newContractDataKernel2
+       *    newContractDataKernel1.aztecAddress,
+       *    newContractDataKernel1.ethAddress (padded to 32 bytes)
+       *    newContractDataKernel2.aztecAddress,
+       *    newContractDataKernel2.ethAddress (padded to 32 bytes)
        * );
        * Note that we always read data, the l2Block (atm) must therefore include dummy or zero-notes for
        * Zero values.
        */
-      bytes memory baseLeaf = new bytes(0x2a8);
+      bytes memory baseLeaf = new bytes(0x2c0);
 
       assembly {
         // Adding new nullifiers
@@ -214,11 +216,29 @@ contract Decoder {
           mul(2, 0x20)
         )
 
-        // Adding contract data
+        // Kernel1.contract.aztecaddress
         calldatacopy(
           add(baseLeaf, add(0x20, add(dstContractOffset, 0x40))),
           add(_l2Block.offset, srcContractDataOffset),
-          mul(2, 0x34)
+          0x20
+        )
+        // Kernel1.contract.ethAddress padded to 32 bytes
+        calldatacopy(
+          add(baseLeaf, add(0x20, add(dstContractOffset, 0x6c))),
+          add(_l2Block.offset, add(srcContractDataOffset, 0x20)),
+          0x14
+        )
+        // Kernel2.contract.aztecaddress
+        calldatacopy(
+          add(baseLeaf, add(0x20, add(dstContractOffset, 0x80))),
+          add(_l2Block.offset, add(srcContractDataOffset, 0x34)),
+          0x20
+        )
+        // Kernel2.contract.ethAddress padded to 32 bytes
+        calldatacopy(
+          add(baseLeaf, add(0x20, add(dstContractOffset, 0xac))),
+          add(_l2Block.offset, add(srcContractDataOffset, 0x54)),
+          0x14
         )
       }
 
