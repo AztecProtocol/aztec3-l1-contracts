@@ -30,7 +30,7 @@ contract UnverifiedDataEmitter {
    * @param _l2blockNum - The l2 block number that the unverified data is related to
    * @param _data - Raw data to share
    */
-  function unverifiedData(uint256 _l2blockNum, bytes calldata _data) external {
+  function emitUnverifiedData(uint256 _l2blockNum, bytes calldata _data) external {
     emit UnverifiedData(_l2blockNum, msg.sender, _data);
   }
 
@@ -42,7 +42,7 @@ contract UnverifiedDataEmitter {
    * @param _portalAddress - The address of the L1 counterparty
    * @param _acir - The acir bytecode of the L2 contract
    */
-  function contractDeployment(bytes32 _aztecAddress, address _portalAddress, bytes calldata _acir)
+  function emitContractDeployment(bytes32 _aztecAddress, address _portalAddress, bytes calldata _acir)
     external
   {
     emit ContractDeployment(_aztecAddress, _portalAddress, _acir);
