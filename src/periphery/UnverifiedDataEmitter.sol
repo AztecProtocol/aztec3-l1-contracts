@@ -4,7 +4,7 @@ pragma solidity >=0.8.18;
 /**
  * @title UnverifiedDataEmitter
  * @author LHerskind
- * @notice Used to log data on chain which are not required to advance the state but are needed for other purposes.
+ * @notice Used to log data on chain which are not required to advance the state but are needed for other purposes
  */
 contract UnverifiedDataEmitter {
   /**
@@ -20,7 +20,7 @@ contract UnverifiedDataEmitter {
    * @param l2blockNum - The L2 block number that the information is related to
    * @param sender - The address of the account sharing the information
    * @param data - The information represented as raw bytes
-   * @dev Typically contains TxAuxData (preimage, contract address and contract slot)
+   * @dev Typically contains `TxAuxData` (preimage, contract address and contract slot)
    */
   event UnverifiedData(uint256 indexed l2blockNum, address indexed sender, bytes data);
 
@@ -37,6 +37,7 @@ contract UnverifiedDataEmitter {
   /**
    * @notice Links L1 and L2 contract addresses
    * @dev Emits a `ContractDeployment` event
+   * @dev Unverified and can be emitted by anyone
    * @param _aztecAddress - The address of the L2 counterparty
    * @param _portalAddress - The address of the L1 counterparty
    * @param _acir - The acir bytecode of the L2 contract
