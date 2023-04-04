@@ -17,21 +17,21 @@ contract UnverifiedDataEmitter {
 
   /**
    * @notice Used to share data which are not required to advance the state but are needed for other purposes
-   * @param l2blockNum - The L2 block number that the information is related to
+   * @param l2BlockNum - The L2 block number that the information is related to
    * @param sender - The address of the account sharing the information
    * @param data - The information represented as raw bytes
    * @dev Typically contains `TxAuxData` (preimage, contract address and contract slot)
    */
-  event UnverifiedData(uint256 indexed l2blockNum, address indexed sender, bytes data);
+  event UnverifiedData(uint256 indexed l2BlockNum, address indexed sender, bytes data);
 
   /**
    * @notice Logs data on chain
    * @dev Emits an `UnverifiedData` event
-   * @param _l2blockNum - The l2 block number that the unverified data is related to
+   * @param _l2BlockNum - The l2 block number that the unverified data is related to
    * @param _data - Raw data to share
    */
-  function emitUnverifiedData(uint256 _l2blockNum, bytes calldata _data) external {
-    emit UnverifiedData(_l2blockNum, msg.sender, _data);
+  function emitUnverifiedData(uint256 _l2BlockNum, bytes calldata _data) external {
+    emit UnverifiedData(_l2BlockNum, msg.sender, _data);
   }
 
   /**
@@ -42,9 +42,11 @@ contract UnverifiedDataEmitter {
    * @param _portalAddress - The address of the L1 counterparty
    * @param _acir - The acir bytecode of the L2 contract
    */
-  function emitContractDeployment(bytes32 _aztecAddress, address _portalAddress, bytes calldata _acir)
-    external
-  {
+  function emitContractDeployment(
+    bytes32 _aztecAddress,
+    address _portalAddress,
+    bytes calldata _acir
+  ) external {
     emit ContractDeployment(_aztecAddress, _portalAddress, _acir);
   }
 }
